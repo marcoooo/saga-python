@@ -800,19 +800,21 @@ cmd_purge () {
 
   if ! test -z "$1"
   then
+    echo "$(date): purge $1" >> "$BASE/.purged"
     DIR="$BASE/$1"
     \rm -rf "$DIR" || true
     RETVAL="purged $1"
   else
+    echo "$(date): purge all" >> "$BASE/.purged"
     for d in `\grep -l -e 'DONE' -e 'FAILED' -e 'CANCELED' "$BASE"/*/state 2>/dev/null`
     do
       dir=`dirname "$d"`
       id=`basename "$dir"`
-      \find  "$BASE/$id"      -type f -mtime +1 -print | xargs -n 100 rm -f
+      \find  "$BASE/$id"      -type f -mtime +1 -print | xargs -n 100 rm -vf >> "$BASE/.purged"
       \rmdir "$BASE/$id"      >/dev/null 2>&1
       \touch "$NOTIFICATIONS"
     done
-    RETVAL="purged finished jobs"
+    RETVAL="purged finished / old jobs"
   fi
 }
 
@@ -825,11 +827,12 @@ cmd_purge () {
 #
 cmd_purge_tmps () {
 
-  \rm -f "$BASE"/bulk.*
-  \rm -f "$BASE"/idle.*
-  \rm -f "$BASE"/quit.*
-  \find  "$BASE" -type d -mtime +30 -print | xargs -n 100 \rm -rf || true
-  \find  "$BASE" -type f -mtime +30 -print | xargs -n 100 \rm -f  || true
+  echo "$(date): purge tmps" >> "$BASE/.purged"
+  \rm -vf "$BASE"/bulk.* >> "$BASE/.purged"
+  \rm -vf "$BASE"/idle.* >> "$BASE/.purged"
+  \rm -vf "$BASE"/quit.* >> "$BASE/.purged"
+  \find  "$BASE" -type d -mtime +30 -print | xargs -n 100 \rm -vrf || true >> "$BASE/.purged"
+  \find  "$BASE" -type f -mtime +30 -print | xargs -n 100 \rm -vf  || true >> "$BASE/.purged"
   RETVAL="purged tmp files"
 }
 
@@ -840,6 +843,7 @@ cmd_purge_tmps () {
 #
 cmd_quit () {
 
+  echo "$(date): purge quit" >> "$BASE/.purged"
   if test "$1" = "TIMEOUT"
   then
     \printf "IDLE TIMEOUT\n"
@@ -852,11 +856,11 @@ cmd_quit () {
 
   # kill idle checker
   /bin/kill $1 >/dev/null 2>&1
-  \rm -f "$BASE/idle.$GID"
+  \rm -vf "$BASE/idle.$GID" >> "$BASE/.purged"
 
   # clean bulk file and other temp files
-  \rm -f $BASE/bulk.$GID
-  \rm -f $BASE/fifo.$GID
+  \rm -vf $BASE/bulk.$GID >> "$BASE/.purged"
+  \rm -vf $BASE/fifo.$GID >> "$BASE/.purged"
 
   # restore shell echo
   \stty echo    >/dev/null 2>&1
@@ -877,9 +881,10 @@ cmd_quit () {
 #
 listen() {
 
+  echo "$(date): purge listen" >> "$BASE/.purged"
   # we need our home base cleaned
   test -d "$BASE" || \mkdir -p  "$BASE"  || exit 1
-  \rm  -f "$BASE/bulk.$GID"
+  \rm -vf "$BASE/bulk.$GID" >> "$BASE/.purged"
   \touch  "$BASE/bulk.$GID"
 
   # make sure the base has a monitor script....
@@ -896,8 +901,8 @@ listen() {
   #IDLE=$!
 
   # make sure the fifo to communicate with the monitors exists
-  \rm -f  "$BASE/fifo.$GID"
-  \mkfifo "$BASE/fifo.$GID"
+  \rm -vf "$BASE/fifo.$GID" >> "$BASE/.purged"
+  \mkfifo "$BASE/fifo.$GID" >> "$BASE/.purged"
 
   # prompt for commands...
   \printf "PROMPT-0->\n"
@@ -1019,7 +1024,8 @@ EOT
     done < "$BASE/bulk.$GID"
 
     # empty the bulk data file
-    \rm -f "$BASE/bulk.$GID"
+    echo "$(date): purge bulk" >> "$BASE/.purged"
+    \rm -vf "$BASE/bulk.$GID" >> "$BASE/.purged"
 
     # next main loop read needs IFS reset again
     OLDIFS=$IFS
